@@ -8,10 +8,10 @@ ROOTLIBS	= $(shell root-config --libs)
 ROOTGLIBS	= $(shell root-config --glibs)
 ROOTINC		= $(shell root-config --incdir)
 
-INCLUDES	= -I$(ROOTINC) -I$(EVIO_INC)
+INCLUDES	= -I$(ROOTINC) -I$(EVIO_INC) -Isimple
 CXXFLAGS	= -g -Wall -std=c++11 $(INCLUDES)
 
-LIBS	        = $(ROOTLIBS)
+LIBS	        = $(ROOTLIBS) -Lsimple -lsimple
 GLIBS         	= $(ROOTGLIBS) -L/usr/X11R6/lib -lXpm -lX11
 
 ALL_LIBS	= -L${EVIO_LIB} -levio $(GLIBS) $(ROOTLIBS)

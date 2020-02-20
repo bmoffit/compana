@@ -41,11 +41,6 @@ $(LIBS): $(OBJ)
 	$(AR) ruv $@ $<
 	$(RANLIB) $@
 
-install: $(LIBS)
-	@cp -v $(PWD)/$< $(LINUXVME_LIB)/$<
-	@cp -v $(PWD)/$(<:%.a=%.so) $(LINUXVME_LIB)/$(<:%.a=%.so)
-	@cp -v ${PWD}/*Lib.h $(LINUXVME_INC)
-
 clean:
 	@rm -vf simpleLib.o libsimple.{a,so}
 
