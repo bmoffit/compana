@@ -1,8 +1,5 @@
 /**
  *   Simple Compton decoder to demonstrate block indexing
- *
- *   Author: Bryan Moffit
- *
  */
 
 /* Modified to print out decoded vetroc data */
@@ -12,6 +9,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include "evio.h"
+#include "simpleLib.h"
 
 #include "TROOT.h"
 #include "TFile.h"
@@ -189,6 +187,7 @@ int main (int argc, char **argv)
   //eventtree->Branch("nhits3", &nhits3, "nhits3/I");
   //eventtree->Branch("nhits4", &nhits4, "nhits4/I");
 
+
   /* Open file  */
   if ( (status = evOpen(argv[1], (char*)"r",  &handle)) < 0)
     {
@@ -214,6 +213,42 @@ int main (int argc, char **argv)
       printf("Dictionary =\n%s\n\n", dictionary);
       free(dictionary);
     }
+
+  // SIMPLE: initialize
+  simpleInit();
+
+  /* SIMPLE: Define banks For compton
+   *  rocID     bankID     slot   what      endian
+   *  1         3            3    fadc250   little
+   *  1         4           13    vetroc    little
+   *  1         4           14    vetroc    little
+   *  1         4           15    vetroc    little
+   *  1         4           16    vetroc    little
+   *  1         6           ??    ??
+   *  3         0x11        ??    ??
+   *  3         0x12        ??    ??
+   *  3         0x56        11    vtp       big
+   *
+   *
+   *  int
+   *  simpleConfigBank(int rocID, int bankID, int num,
+   *                    int endian, int isBlocked, void *firstPassRoutine)
+   *
+   * @param rocID             roc ID
+   * @param bankID            Bank ID
+   * @param num               NOT USED
+   * @param endian            little = 0, big = 1
+   * @param isBlocked         no = 0, yes = 1
+   * @param firstPassRoutine  Routine to call for first pass processing
+   */
+  simpleConfigBank(1, 0x3, 0, 0, 1, NULL);
+  simpleConfigBank(1, 0x4, 0, 0, 1, NULL);
+  simpleConfigBank(1, 0x6, 0, 0, 0, NULL);
+  simpleConfigBank(3, 0x56, 20, 1, 1, NULL);
+  simpleConfigBank(3, 0x11, 20, 1, 0, NULL);
+  simpleConfigBank(3, 0x12, 20, 1, 0, NULL);
+
+
 
   /* Loop through getting event blocks one at a time and print basic infomation
      about each block */
@@ -289,6 +324,11 @@ int main (int argc, char **argv)
 	}
       else
 	{ /* This is a built Physics Event. Disect a bit more... */
+	  /* SIMPLE: index the data */
+	  simpleScan(buf, nWords);
+
+
+#ifdef OLDWAY
 	  /* Check the Trigger Bank and how many ROC banks it has */
 	  indx += 2;
 	  ii=0;
@@ -320,7 +360,7 @@ int main (int argc, char **argv)
 	      if(verbose) printf("     ROC %d  ID = %3d  Ptr = %d  Len = %6d words \n",i,rocID[i],rocPtr[i],rocLen[i]);
 	    }
 	  if(verbose) printf("\n");
-
+#endif /* OLDWAY */
 
 	  if (ptb)
 	    {
@@ -385,6 +425,63 @@ int main (int argc, char **argv)
 	  trgtime = 0;
 
 	  if(verbose) printf("num = %d\n",num);
+
+
+	  /* Start with data that's not blocked */
+	  unsigned int header = 0;
+	  int rocID = 1, bankID = 3, slot = 3;
+
+	  /* FADC data */
+	  if(simpleGetSlotBlockHeader(1 /* rocID */,
+				      3 /* bankID */,
+				      3 /* slot */,
+				      &header) <= 0)
+	    {
+	      printf("ERROR getting block header\n");
+	    }
+	  fadcDataDecode(header);
+
+
+
+	  /* SIMPLE: Loop through blocked data - Block level determined from trigger bank */
+	  int iev = 0;  /* event of block index := [0, block level - 1] */
+	  for(iev = 0; iev < tbank.blksize; iev++)
+	    {
+	      int idata = 0;
+	      unsigned int *simpBuf = NULL;
+	      int simpLen = 0;
+
+	      rocID = 1; bankID = 3; slot = 3;  // FADC Slot 3
+	      simpLen = simpleGetSlotEventData(rocID, bankID, slot, iev, &simpBuf);
+	      if(simpLen <= 0)
+		{
+		  printf("ERROR getting rocID = 0x%x, bankID = 0x%x, slot %d event data\n",
+			 rocID, bankID, slot);
+		}
+	      for(idata = 0; idata < simpLen; idata++)
+		{
+		  fadcDataDecode(simpBuf[idata]);
+		}
+
+	      rocID = 1; bankID = 4;  // Vetroc Slot 13-16
+	      for(slot = 13; slot < 17; slot++)
+		{
+		  simpLen = simpleGetSlotEventData(rocID, bankID, slot, iev, &simpBuf);
+		  if(simpLen <= 0)
+		    {
+		      printf("ERROR getting rocID = 0x%x, bankID = 0x%x, slot %d event data\n",
+			     rocID, bankID, slot);
+		    }
+		  for(idata = 0; idata < simpLen; idata++)
+		    {
+		      vetrocDataDecode(simpBuf[idata]);
+		    }
+		}
+
+	      eventtree->Fill();
+	    }
+
+#ifdef OLDSTUFF
 	  for (j=0; j<num; j++)
 	    {
 	      //if(verbose) printf("j = %d, word = 0x%x\n", j, buf[j]);
@@ -432,6 +529,7 @@ int main (int argc, char **argv)
 		}
 	      }
 	    }
+#endif /* OLDSTUFF */
 
 	}
 
